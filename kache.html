@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Record Video with Audio to MP4</title>
+</head>
+<body>
+    <h1>Record Video with Audio</h1>
+    <input type="file" id="fileInput" accept="video/*"><br><br>
+    <label for="codecSelect">Choose MP4 codec:</label>
+    <select id="codecSelect">
+        <option value='video/mp4; codecs="avc1.42E01E, mp4a.40.2"'>H.264 Baseline Profile</option>
+        <option value='video/mp4; codecs="avc1.4D401E, mp4a.40.2"'>H.264 Main Profile</option>
+        <option value='video/mp4; codecs="avc1.64001F, mp4a.40.2"'>H.264 High Profile</option>
+        <option value='video/mp4; codecs="avc1.640028, mp4a.40.2"'>H.264 High Profile Level 4.0</option>
+    </select><br><br>
+    <button id="recordBtn">Record</button>
+    <p id="status"></p>
+    <a id="downloadLink" style="display:none;">Download recorded file</a>
+
+    <video id="video" controls style="display:none;"></video>
+
+    <script>
+        const recordBtn = document.getElementById('recordBtn');
+        const status = document.getElementById('status');
+        const videoElement = document.getElementById('video');
+
+        recordBtn.addEventListener('click', async () => {
+            const fileInput = document.getElementById('fileInput').files[0];
+            const codecOption = document.getElementById('codecSelect').value;
+
+            if (!fileInput) {
+                alert('Please select a video file.');
+                return;
+            }
+
+            const fileURL = URL.createObjectURL(fileInput);
+            videoElement.src = fileURL;
+            videoElement.load();
+
+            videoElement.onloadedmetadata = () => {
+                const stream = videoElement.captureStream();
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioCtx.createMediaElementSource(videoElement);
+                const dest = audioCtx.createMediaStreamDestination();
+                source.connect(dest);
+
+                const combinedStream = new MediaStream([...stream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+
+                const options = { mimeType: codecOption };
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    alert('This format is not supported: ' + options.mimeType);
+                    return;
+                }
+
+                const mediaRecorder = new MediaRecorder(combinedStream, options);
+                const chunks = [];
+
+                mediaRecorder.ondataavailable = e => {
+                    if (e.data.size > 0) {
+                        chunks.push(e.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: options.mimeType });
+                    const url = URL.createObjectURL(blob);
+                    const downloadLink = document.getElementById('downloadLink');
+                    downloadLink.href = url;
+                    downloadLink.download = 'output.mp4';
+                    downloadLink.style.display = 'block';
+                    downloadLink.textContent = 'Download recorded file';
+                    status.textContent = 'Recording completed.';
+                    recordBtn.disabled = false;
+                    audioCtx.close();
+                };
+
+                mediaRecorder.start();
+                videoElement.play();
+                status.textContent = 'Recording...';
+                recordBtn.disabled = true;
+
+                videoElement.onended = () => {
+                    mediaRecorder.stop();
+                };
+            };
+        });
+    </script>
+</body>
+</html>
